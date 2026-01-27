@@ -171,7 +171,12 @@ def run_mmcp_all_periods(
     results_dir = output_dir / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
 
+    progress.info("\nSaving MMCP results and computing derived quantities...")
+
     for period, result in results.items():
+        period_name = config.time_periods.get(period, f"Period {period}")
+        progress.info(f"  Processing {period_name}...")
+
         period_dir = results_dir / f"mmcp_period_{period}"
         period_dir.mkdir(exist_ok=True)
 
@@ -190,12 +195,14 @@ def run_mmcp_all_periods(
 
         # Compute and save posterior standard deviation at grid
         # Using sample_conditional=True for proper uncertainty quantification
+        progress.info(f"    Computing grid_probs_std (conditional sampling)...")
         mcmc_results = result["results"]
         grid_probs_std = _compute_grid_probs_std(mcmc_results, n_samples=50)
         np.save(period_dir / "grid_probs_std.npy", grid_probs_std)
 
         # Compute and save site existence probability q(s) = sigmoid(η_int)
         # intensity = λ* × q(s), so q(s) = intensity / λ*
+        progress.info(f"    Computing site_probability (grid intensity)...")
         intensity = mcmc_results.predict_intensity(location="grid")
         lambda_star_mean = mcmc_results.lambda_star_samples.mean()
         site_probability = intensity / lambda_star_mean
@@ -599,7 +606,7 @@ def generate_figures(
         output_path=figures_dir / "fig_5_2_effect_distance.png",
     )
 
-    # 5b. Generate Figure 5.2b: Intercept adjustment effect
+    # 5b. Generate Figure 5.2b: Intercept adjustment effect (2 main origins only)
     progress.info("Generating Figure 5.2b: Intercept adjustment (data correction)")
     plot_effect_by_periods_and_origins(
         plotter=plotter,
@@ -608,13 +615,41 @@ def generate_figures(
         all_datasets=all_datasets,
         effect_name="intercept_adjustment",
         periods=list(config.time_periods.keys()),
-        origin_indices=[0, 1, 2, 3],
+        origin_indices=[0, 1],  # 神津島, 信州 only
         origins=config.origins,
         time_periods=config.time_periods,
         scatter=True,
         vcenter=0.2,
         output_path=figures_dir / "fig_5_2b_effect_intercept_adjustment.png",
     )
+
+    # 5c. Generate Figure 5.10: Weighted intercept adjustment by site probability
+    progress.info("Generating Figure 5.10: Weighted intercept adjustment")
+    all_site_probability: Dict[int, np.ndarray] = {}
+    for period in config.time_periods.keys():
+        site_prob_path = results_dir / f"mmcp_period_{period}" / "site_probability.npy"
+        if site_prob_path.exists():
+            all_site_probability[period] = np.load(site_prob_path)
+
+    if all_site_probability:
+        plot_effect_by_periods_and_origins(
+            plotter=plotter,
+            grid_coords=grid_coords,
+            all_effects=all_effects,
+            all_datasets=all_datasets,
+            effect_name="intercept_adjustment",
+            periods=list(config.time_periods.keys()),
+            origin_indices=[0, 1],  # 神津島, 信州 only
+            origins=config.origins,
+            time_periods=config.time_periods,
+            scatter=True,
+            vcenter=0.2,
+            weight_by=all_site_probability,
+            title_suffix="（遺跡存在確率で重み付け）",
+            output_path=figures_dir / "fig_5_10_weighted_intercept_adjustment.png",
+        )
+    else:
+        progress.info("Skipping Figure 5.10: site_probability.npy not found")
 
     # 6. Generate Figure 5.3: Estimated vs Observed scatter
     progress.info("Generating Figure 5.3: Estimated vs Observed")
@@ -778,6 +813,142 @@ def generate_figures(
     progress.info(f"\nAll figures saved to {figures_dir}")
 
 
+def run_ipp_fixed_experiment(
+    config: ExperimentConfig,
+    preprocessor,
+    output_dir: Path,
+    progress: ProgressManager,
+) -> None:
+    """Run IPP model with fixed intensity coefficients and generate site probability figure.
+
+    This experiment uses fixed_intensity_coefficients=True mode to compare with
+    the spatial varying coefficient mode.
+
+    Parameters
+    ----------
+    config : ExperimentConfig
+        Experiment configuration.
+    preprocessor : ObsidianDataPreprocessor
+        Data preprocessor.
+    output_dir : Path
+        Directory to save results.
+    progress : ProgressManager
+        Progress manager for output control.
+    """
+    from bayesian_statistics.nngp.model.marked_point_process import (
+        MarkedPointProcessConfig,
+        MarkedPointProcessSampler,
+        prepare_marked_point_process_dataset,
+    )
+
+    from .visualization import (
+        MapPlotter,
+        apply_japanese_font,
+        plot_site_probability_map,
+    )
+
+    progress.section("Running IPP with fixed intensity coefficients")
+
+    # Use period 0 for this experiment
+    period = 0
+    period_name = config.time_periods[period]
+    progress.info(f"Period: {period} ({period_name})")
+
+    # Prepare dataset
+    dataset = prepare_marked_point_process_dataset(
+        preprocessor=preprocessor,
+        period=period,
+        origins=config.origins,
+        grid_subsample_ratio=config.grid_subsample_ratio,
+        drop_zero_total_sites=True,
+        intensity_variable_names=config.intensity_variable_names,
+        mark_variable_names=config.mark_variable_names,
+        distance_column_names=config.distance_column_names,
+        source_weights=config.source_weights,
+        lambda_fixed=config.lambda_fixed,
+        tau=config.tau,
+        alpha=config.alpha,
+    )
+    progress.info(f"Sites: {dataset.num_sites()}, Grid: {dataset.num_grid()}")
+
+    # Create config with fixed intensity coefficients
+    mmcp_config = MarkedPointProcessConfig(
+        n_iter=config.n_iter,
+        burn_in=config.burn_in,
+        thinning=config.thinning,
+        seed=42,
+        neighbor_count=config.neighbor_count,
+        intensity_kernel_lengthscale=config.intensity_lengthscale,
+        intensity_kernel_variance=config.intensity_variance,
+        mark_kernel_lengthscale=config.mark_lengthscale,
+        mark_kernel_variance=config.mark_variance,
+        lambda_prior_shape=config.lambda_prior_shape,
+        lambda_prior_rate=config.lambda_prior_rate,
+        tau=config.tau,
+        alpha=config.alpha,
+        source_weights=config.source_weights,
+        lambda_fixed=config.lambda_fixed,
+        # Key: Enable fixed intensity coefficients mode
+        fixed_intensity_coefficients=True,
+        intensity_prior_mean=0.0,
+        intensity_prior_variance=10.0,
+    )
+    progress.info(f"MCMC: n_iter={config.n_iter}, n_saved={mmcp_config.n_saved()}")
+    progress.info("Mode: fixed_intensity_coefficients=True")
+
+    # Run sampler
+    sampler = MarkedPointProcessSampler(dataset, mmcp_config)
+    show_progress = progress.should_show_progress()
+    results = sampler.run(show_progress=show_progress)
+
+    # Compute site probability: q(s) = intensity / lambda*
+    intensity = results.predict_intensity(location="grid")
+    lambda_star_mean = results.lambda_star_samples.mean()
+    site_probability = intensity / lambda_star_mean
+
+    progress.info(f"lambda* mean: {lambda_star_mean:.4f}")
+    progress.info(
+        f"site_probability range: [{np.nanmin(site_probability):.4f}, "
+        f"{np.nanmax(site_probability):.4f}]"
+    )
+
+    # Generate visualization
+    progress.info("Generating site probability figure...")
+    apply_japanese_font()
+
+    # Get boundary for plotter
+    import polars as pl
+
+    boundary = (
+        preprocessor.df_elevation.filter(
+            pl.col("average_elevation").is_null(), ~pl.col("is_sea")
+        )
+        .select(["x", "y"])
+        .to_numpy()
+    )
+
+    plotter = MapPlotter(
+        boundary=boundary,
+        is_land=dataset.valid_grids,
+    )
+
+    figures_dir = output_dir / "figures"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    output_path = figures_dir / "fig_5_9_site_probability.png"
+
+    plot_site_probability_map(
+        plotter=plotter,
+        grid_coords=dataset.grid_coords,
+        site_probability=site_probability,
+        site_coords=dataset.site_coords,
+        period_name=period_name,
+        output_path=output_path,
+    )
+
+    progress.info(f"Figure saved to: {output_path}")
+    progress.section("IPP fixed experiment completed!")
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -802,6 +973,11 @@ def main():
         "--generate-figures",
         action="store_true",
         help="Generate all figures",
+    )
+    parser.add_argument(
+        "--run-ipp-fixed",
+        action="store_true",
+        help="Run IPP with fixed intensity coefficients (generates fig_5_9)",
     )
     parser.add_argument(
         "--all",
@@ -831,7 +1007,8 @@ def main():
 
     # Default: show help
     if not any(
-        [args.run_models, args.mmcp_only, args.run_loocv, args.generate_figures, args.all]
+        [args.run_models, args.mmcp_only, args.run_loocv, args.generate_figures,
+         args.run_ipp_fixed, args.all]
     ):
         parser.print_help()
         return
@@ -869,7 +1046,7 @@ def main():
         progress.info(f"WARNING: {warning}")
 
     if config.n_saved() == 0 and (
-        args.run_models or args.mmcp_only or args.run_loocv or args.all
+        args.run_models or args.mmcp_only or args.run_loocv or args.run_ipp_fixed or args.all
     ):
         progress.info("ERROR: n_saved=0. Cannot run models without saving samples.")
         progress.info(f"  Current: n_iter={config.n_iter}, burn_in={config.burn_in}")
@@ -880,7 +1057,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     preprocessor = None
-    if args.run_models or args.mmcp_only or args.run_loocv or args.all:
+    if args.run_models or args.mmcp_only or args.run_loocv or args.run_ipp_fixed or args.all:
         preprocessor = load_preprocessor(config)
 
     if args.run_models or args.mmcp_only or args.all:
@@ -894,6 +1071,9 @@ def main():
 
     if args.run_loocv or args.all:
         run_loocv_evaluation(config, preprocessor, output_dir, progress)
+
+    if args.run_ipp_fixed:
+        run_ipp_fixed_experiment(config, preprocessor, output_dir, progress)
 
     if args.generate_figures or args.all:
         generate_figures(config, output_dir, progress)

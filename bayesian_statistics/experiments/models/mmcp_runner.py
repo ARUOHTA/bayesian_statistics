@@ -108,6 +108,9 @@ class MMCPRunner:
             alpha=self.config.alpha,
             source_weights=self.config.source_weights,
             lambda_fixed=self.config.lambda_fixed,
+            fixed_intensity_coefficients=self.config.fixed_intensity_coefficients,
+            intensity_prior_mean=self.config.intensity_prior_mean,
+            intensity_prior_variance=self.config.intensity_prior_variance,
         )
 
     def _prepare_dataset(
@@ -178,7 +181,7 @@ class MMCPRunner:
 
         dataset = self._prepare_dataset(preprocessor, period)
         config = self._create_mmcp_config()
-        sampler = MarkedPointProcessSampler(dataset, config, show_progress=False)
+        sampler = MarkedPointProcessSampler(dataset, config)
         results = sampler.run(show_progress=show_progress)
 
         return results, dataset

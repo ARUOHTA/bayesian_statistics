@@ -100,6 +100,11 @@ class ExperimentConfig:
     intensity_lengthscale: float = 0.1
     intensity_variance: float = 1.0
 
+    # 固定係数モード（点過程の強度係数）
+    fixed_intensity_coefficients: bool = True  # デフォルトでTrue（非空間変動係数）
+    intensity_prior_mean: float = 0.0
+    intensity_prior_variance: float = 10.0
+
     # λ*の事前分布（Gamma(shape, rate)）
     lambda_prior_shape: float = 2.0
     lambda_prior_rate: float = 0.1

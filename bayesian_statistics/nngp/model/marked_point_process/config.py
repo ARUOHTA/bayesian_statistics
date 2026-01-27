@@ -82,6 +82,11 @@ class MarkedPointProcessConfig:
     source_weights: Optional[Sequence[float]] = None  # Importance weights (K-1,)
     lambda_fixed: Optional[Sequence[float]] = None  # Fixed scaling (K-1,) or None
 
+    # Fixed intensity coefficients mode (non-spatial)
+    fixed_intensity_coefficients: bool = False  # True for fixed (non-spatial) coefficients
+    intensity_prior_mean: float = 0.0  # Prior mean for fixed coefficients (scalar or per-coef vector supported at runtime)
+    intensity_prior_variance: float = 10.0  # Prior variance for fixed coefficients (scalar or per-coef vector supported at runtime)
+
     def n_saved(self) -> int:
         """Compute the number of posterior samples that will be saved.
 

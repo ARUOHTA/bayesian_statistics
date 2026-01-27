@@ -20,7 +20,7 @@ from bayesian_statistics.nngp.model.sample import update_beta_category
 
 
 def compute_q(eta: np.ndarray) -> np.ndarray:
-    """Compute existence probability q(s,t) = sigmoid(η).
+    """Compute existence probability q(s,t) = sigmoid(η) in a numerically stable way.
 
     Parameters
     ----------
@@ -32,7 +32,13 @@ def compute_q(eta: np.ndarray) -> np.ndarray:
     np.ndarray
         Probability values in [0, 1].
     """
-    return 1.0 / (1.0 + np.exp(-eta))
+    eta = np.asarray(eta, dtype=float)
+    out = np.empty_like(eta)
+    pos = eta >= 0
+    out[pos] = 1.0 / (1.0 + np.exp(-eta[pos]))
+    exp_eta = np.exp(eta[~pos])
+    out[~pos] = exp_eta / (1.0 + exp_eta)
+    return out
 
 
 def sample_pseudo_absence(
@@ -170,6 +176,106 @@ def compute_kappa_intensity(y: np.ndarray) -> np.ndarray:
         κ values.
     """
     return y - 0.5
+
+
+def compute_eta_intensity_fixed(beta: np.ndarray, W: np.ndarray) -> np.ndarray:
+    """Compute linear predictor eta for fixed (non-spatial) intensity coefficients.
+
+    For fixed coefficients, eta = W @ beta where beta is a 1D vector shared
+    across all locations.
+
+    Parameters
+    ----------
+    beta : np.ndarray
+        Coefficient vector with shape (p+1,).
+    W : np.ndarray
+        Design matrix with shape (n, p+1).
+
+    Returns
+    -------
+    np.ndarray
+        Linear predictor values with shape (n,).
+    """
+    return W @ beta
+
+
+def update_beta_intensity_fixed(
+    beta_int: np.ndarray,
+    W: np.ndarray,
+    omega: np.ndarray,
+    kappa: np.ndarray,
+    prior_mean: float,
+    prior_variance: float,
+    rng: np.random.Generator,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Gibbs update for fixed (non-spatial) intensity coefficients.
+
+    This implements the standard Polya-Gamma regression update for logistic
+    regression with Gaussian prior on coefficients.
+
+    Posterior distribution:
+        beta | omega, y ~ N(m, V)
+        V = (Sigma_0^{-1} + W^T Omega W)^{-1}
+        m = V (Sigma_0^{-1} mu_0 + W^T kappa)
+
+    where:
+        - Sigma_0 = prior_variance * I (prior covariance)
+        - mu_0 = prior_mean * ones (prior mean vector)
+        - Omega = diag(omega) (Polya-Gamma augmentation)
+        - kappa = y - 0.5 (response transformation)
+
+    Parameters
+    ----------
+    beta_int : np.ndarray
+        Current intensity coefficients, shape (p+1,). Not used but kept for API consistency.
+    W : np.ndarray
+        Design matrix with intercept, shape (n, p+1).
+    omega : np.ndarray
+        Polya-Gamma samples omega_i ~ PG(1, eta_i), shape (n,).
+    kappa : np.ndarray
+        kappa_i = y_i - 0.5 where y_i = 1 for X, 0 for U, shape (n,).
+    prior_mean : float
+        Prior mean for all coefficients.
+    prior_variance : float
+        Prior variance for all coefficients.
+    rng : np.random.Generator
+        Random number generator.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        Updated (beta_int, eta_int).
+    """
+    p = W.shape[1]
+
+    # Prior precision and mean (support scalar or per-coefficient vectors)
+    mu_0 = np.full(p, float(prior_mean)) if np.ndim(prior_mean) == 0 else np.asarray(prior_mean, dtype=float)
+    if mu_0.shape[0] != p:
+        mu_0 = np.full(p, float(prior_mean))
+
+    if np.ndim(prior_variance) == 0:
+        Sigma_0_inv = np.eye(p) / float(prior_variance)
+    else:
+        var_vec = np.asarray(prior_variance, dtype=float)
+        if var_vec.shape[0] != p:
+            var_vec = np.full(p, float(np.mean(var_vec)))
+        Sigma_0_inv = np.diag(1.0 / var_vec)
+
+    # Posterior precision: V^{-1} = Sigma_0^{-1} + W^T Omega W
+    V_inv = Sigma_0_inv + W.T @ (omega[:, np.newaxis] * W)
+    # Small jitter for numerical stability
+    V_inv = 0.5 * (V_inv + V_inv.T)
+    V_inv += 1e-12 * np.eye(p)
+
+    # Posterior mean: m = V (Sigma_0^{-1} mu_0 + W^T kappa)
+    V = np.linalg.solve(V_inv, np.eye(p))
+    m = V @ (Sigma_0_inv @ mu_0 + W.T @ kappa)
+
+    # Sample from posterior
+    beta_new = rng.multivariate_normal(m, V)
+    eta_new = W @ beta_new
+
+    return beta_new, eta_new
 
 
 def compute_eta_intensity(beta: np.ndarray, W: np.ndarray) -> np.ndarray:

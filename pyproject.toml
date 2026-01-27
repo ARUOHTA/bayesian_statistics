@@ -8,7 +8,6 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "numpy>=1.26.4",
     "pandas>=2.2.2",
     "tqdm>=4.66.4",
     "scipy==1.12.0",
@@ -18,7 +17,6 @@ dependencies = [
     "statsmodels>=0.14.2",
     "seaborn>=0.13.2",
     "h5py>=3.11.0",
-    "arviz==0.17.1",
     "polars>=1.9.0",
     "geopandas>=1.0.1",
     "contextily>=1.6.2",
@@ -31,9 +29,11 @@ dependencies = [
     "jismesh>=2.1.0",
     "pyvisgraph>=0.2.1",
     "gpy>=1.13.2",
-    "pymc>=5.12.0",
     "pypolyagamma>=1.2.3",
     "mpxpy>=0.0.18",
+    "numpy>=1.26.4",
+    "arviz>=0.17.1",
+    "pymc>=5.12.0",
 ]
 
 [build-system]

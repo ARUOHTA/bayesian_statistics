@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import scipy.sparse as sp
+from scipy import linalg
 from scipy.spatial import KDTree
 from scipy.stats import norm
 from tqdm import tqdm
@@ -31,6 +32,7 @@ def build_nngp_factors(
     kernel,
     jitter: float = 1e-8,
     order: Optional[np.ndarray] = None,
+    show_progress: bool = False,
 ) -> Tuple[NNGPFactors, np.ndarray]:
     """
     Build Vecchia/NNGP factors (A,D) for a single set of points with an ordering.
@@ -53,7 +55,7 @@ def build_nngp_factors(
     a_rows_ord: List[np.ndarray] = []
     d_ord = np.zeros(n, dtype=float)
 
-    for i in tqdm(range(n)):
+    for i in tqdm(range(n), disable=not show_progress):
         if i == 0:
             neighbor_idx_ord.append(np.zeros(0, dtype=int))
             a_rows_ord.append(np.zeros(0, dtype=float))
@@ -97,10 +99,10 @@ def build_nngp_factors(
 
         # Solve K_NN w = k_Ni (where k_Ni = k_iN^T)
         try:
-            L = np.linalg.cholesky(K_NN)
-            w = np.linalg.solve(L.T, np.linalg.solve(L, k_iN))
-        except np.linalg.LinAlgError:
-            w = np.linalg.solve(K_NN, k_iN)
+            c, lower = linalg.cho_factor(K_NN)
+            w = linalg.cho_solve((c, lower), k_iN)
+        except linalg.LinAlgError:
+            w = linalg.solve(K_NN, k_iN)
 
         a = w  # length m
         d = max(k_ii - float(k_iN @ w), 0.0)
@@ -137,6 +139,7 @@ def build_cross_factors(
     M: int,
     kernel,
     jitter: float = 1e-8,
+    show_progress: bool = False,
 ) -> NNGPFactors:
     """
     Build NNGP-like factors for targets conditioning only on the prior set.
@@ -155,7 +158,7 @@ def build_cross_factors(
     a_rows: List[np.ndarray] = []
     d = np.zeros(nU, dtype=float)
 
-    for i in tqdm(range(nU)):
+    for i in tqdm(range(nU), disable=not show_progress):
         k = min(M, nS)
         dists, idx = tree.query(U[i], k=k)
         idx = np.atleast_1d(idx)
@@ -166,10 +169,10 @@ def build_cross_factors(
         k_iN = kernel.K(xi, XN).ravel()
         k_ii = float(kernel.K(xi, xi)[0, 0])
         try:
-            L = np.linalg.cholesky(K_NN)
-            w = np.linalg.solve(L.T, np.linalg.solve(L, k_iN))
-        except np.linalg.LinAlgError:
-            w = np.linalg.solve(K_NN, k_iN)
+            c, lower = linalg.cho_factor(K_NN)
+            w = linalg.cho_solve((c, lower), k_iN)
+        except linalg.LinAlgError:
+            w = linalg.solve(K_NN, k_iN)
         a_rows.append(w)
         neighbor_idx.append(idx)
         d[i] = max(k_ii - float(k_iN @ w), 0.0)
@@ -525,9 +528,9 @@ def build_grid_interpolation_matrix(
         K_NN += jitter * np.eye(K_NN.shape[0])
 
         try:
-            L = np.linalg.cholesky(K_NN)
-            a_g = np.linalg.solve(L.T, np.linalg.solve(L, K_gN))
-        except np.linalg.LinAlgError:
+            c, lower = linalg.cho_factor(K_NN)
+            a_g = linalg.cho_solve((c, lower), K_gN)
+        except linalg.LinAlgError:
             # Fallback: uniform weights
             a_g = np.ones(neighbor_idx.size) / neighbor_idx.size
 

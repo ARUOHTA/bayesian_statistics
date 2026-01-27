@@ -37,6 +37,8 @@ def plot_effect_by_periods_and_origins(
     cmap: str = CMAP_PROBABILITY,
     vcenter: Optional[float] = None,
     output_path: Optional[Union[str, Path]] = None,
+    weight_by: Optional[Dict[int, np.ndarray]] = None,
+    title_suffix: str = "",
 ) -> tuple:
     """Plot effect comparison across periods and origins.
 
@@ -68,6 +70,11 @@ def plot_effect_by_periods_and_origins(
         Center value for TwoSlopeNorm.
     output_path : str or Path, optional
         Path to save the figure.
+    weight_by : dict, optional
+        Dictionary mapping period -> weight array (n_grid,).
+        If provided, effect values are multiplied element-wise by weights.
+    title_suffix : str, optional
+        Suffix to append to the figure title.
 
     Returns
     -------
@@ -91,9 +98,20 @@ def plot_effect_by_periods_and_origins(
     max_val = -np.inf
     min_val = np.inf
     for p_idx in periods:
-        effect_data = all_effects[p_idx][effect_name]
-        max_val = max(max_val, effect_data.max())
-        min_val = min(min_val, effect_data.min())
+        effect_data = all_effects[p_idx][effect_name]  # (K, n_grid)
+        for origin_idx in origin_indices:
+            effect_k = effect_data[origin_idx]  # (n_grid,)
+            # Apply weights if provided (mask deviation from vcenter)
+            if weight_by is not None and p_idx in weight_by:
+                if vcenter is not None:
+                    deviation = effect_k - vcenter
+                    effect_k = vcenter + deviation * weight_by[p_idx]
+                else:
+                    effect_k = effect_k * weight_by[p_idx]
+            valid_values = effect_k[plotter.is_land]
+            if len(valid_values) > 0:
+                max_val = max(max_val, np.nanmax(valid_values))
+                min_val = min(min_val, np.nanmin(valid_values))
 
     # Setup normalization
     if vcenter is not None:
@@ -110,12 +128,19 @@ def plot_effect_by_periods_and_origins(
         for col_idx, p_idx in enumerate(periods):
             ax = axes[row_idx, col_idx]
 
-            # Get effect data
+            # Get effect data and apply weights if provided (mask deviation from vcenter)
             effect_data = all_effects[p_idx][effect_name]
+            effect_k = effect_data[origin_idx]  # (n_grid,)
+            if weight_by is not None and p_idx in weight_by:
+                if vcenter is not None:
+                    deviation = effect_k - vcenter
+                    effect_k = vcenter + deviation * weight_by[p_idx]
+                else:
+                    effect_k = effect_k * weight_by[p_idx]
 
             # Plot grid scatter
             scatter_kwargs = {
-                "c": effect_data[origin_idx, plotter.is_land],
+                "c": effect_k[plotter.is_land],
                 "cmap": cmap,
                 "s": 8,
                 "alpha": 0.8,
@@ -184,7 +209,7 @@ def plot_effect_by_periods_and_origins(
 
     # Common colorbar
     fig.colorbar(sc, ax=axes, label="確率", shrink=0.7, pad=0.02)
-    fig.suptitle(f"効果: {effect_name}", fontsize=SUPTITLE_FONTSIZE, y=1.01)
+    fig.suptitle(f"効果: {effect_name}{title_suffix}", fontsize=SUPTITLE_FONTSIZE, y=1.01)
 
     if output_path:
         fig.savefig(output_path, dpi=300, bbox_inches="tight")

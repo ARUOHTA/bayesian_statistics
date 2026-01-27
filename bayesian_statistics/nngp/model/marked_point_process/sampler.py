@@ -37,11 +37,13 @@ from .config import MarkedPointProcessConfig
 from .dataset import MarkedPointProcessDataset
 from .intensity import (
     compute_eta_intensity,
+    compute_eta_intensity_fixed,
     compute_kappa_intensity,
     compute_q,
     sample_omega_intensity,
     sample_pseudo_absence,
     update_beta_intensity,
+    update_beta_intensity_fixed,
     update_lambda_star,
 )
 
@@ -60,7 +62,9 @@ class MarkedPointProcessResults:
     beta_mark_samples : np.ndarray
         Samples of mark coefficients, shape (n_saved, K-1, p+1, n_sites).
     beta_int_samples : np.ndarray
-        Samples of intensity coefficients at sites, shape (n_saved, p_int+1, n_sites).
+        Samples of intensity coefficients.
+        - Fixed mode: shape (n_saved, p_int)
+        - Spatial mode: shape (n_saved, p_int, n_sites)
     n_pseudo_absence : List[int]
         Number of pseudo-absence points at each saved iteration.
     dataset : MarkedPointProcessDataset
@@ -215,7 +219,9 @@ class MarkedPointProcessResults:
         The intensity function λ(s) = λ* × q(s) where q(s) = sigmoid(η_int(s)).
 
         For sites, η_int is directly available from the posterior samples.
-        For grid points, η_int is interpolated using NNGP conditional mean.
+        For grid points:
+        - Fixed coefficient mode: η_int = W_grid @ beta (direct computation)
+        - Spatial coefficient mode: η_int is interpolated using NNGP conditional mean
 
         Parameters
         ----------
@@ -230,10 +236,16 @@ class MarkedPointProcessResults:
         lambda_star_mean = self.lambda_star_samples.mean()
 
         if location == "sites":
-            # Use posterior mean of beta_int at sites
             W = self.dataset.design_matrix_intensity
-            beta_int_mean = self.beta_int_samples.mean(axis=0)  # (p_int+1, n_sites)
-            eta_sites = compute_eta_intensity(beta_int_mean, W)
+            beta_int_mean = self.beta_int_samples.mean(axis=0)
+
+            if self.config.fixed_intensity_coefficients:
+                # Fixed mode: beta_int_mean has shape (p_int,)
+                eta_sites = compute_eta_intensity_fixed(beta_int_mean, W)
+            else:
+                # Spatial mode: beta_int_mean has shape (p_int, n_sites)
+                eta_sites = compute_eta_intensity(beta_int_mean, W)
+
             q = compute_q(eta_sites)
             return lambda_star_mean * q
 
@@ -242,8 +254,6 @@ class MarkedPointProcessResults:
                 raise ValueError("No grid coordinates in dataset")
 
             n_grid = len(self.dataset.grid_coords)
-            n_samples = self.beta_int_samples.shape[0]
-            p_int_plus_1 = self.beta_int_samples.shape[1]
 
             # Get grid design matrix
             W_grid = self.dataset.design_matrix_grid_intensity
@@ -251,35 +261,43 @@ class MarkedPointProcessResults:
                 W_grid = np.ones((n_grid, 1))
 
             # Handle NaN in design matrix (invalid grid points)
-            # Replace NaN with 0 for computation, then mask the result
             W_grid_clean = np.nan_to_num(W_grid, nan=0.0)
 
-            # Build NNGP interpolation matrix from sites to grid
-            # This is done once for all features (same spatial structure)
-            kernel = LocalNNGPKernel(lengthscale=0.15, variance=1.0)
-            A_grid = build_grid_interpolation_matrix(
-                site_coords=self.dataset.site_coords,
-                grid_coords=self.dataset.grid_coords,
-                kernel=kernel,
-                M=min(10, self.dataset.num_sites()),
-            )
+            if self.config.fixed_intensity_coefficients:
+                # Fixed mode: direct computation, no NNGP interpolation needed
+                beta_int_mean = self.beta_int_samples.mean(axis=0)  # (p_int,)
+                eta_grid = compute_eta_intensity_fixed(beta_int_mean, W_grid_clean)
+            else:
+                # Spatial mode: NNGP interpolation from sites to grid
+                n_samples = self.beta_int_samples.shape[0]
+                p_int_plus_1 = self.beta_int_samples.shape[1]
 
-            # Average over posterior samples
-            eta_grid_samples = np.zeros((n_samples, n_grid))
-            for sample_idx in range(n_samples):
-                beta_sites = self.beta_int_samples[sample_idx]  # (p_int+1, n_sites)
-                beta_grid = np.zeros((p_int_plus_1, n_grid))
-
-                # Interpolate each feature's coefficients to grid
-                for j in range(p_int_plus_1):
-                    beta_grid[j] = A_grid @ beta_sites[j]
-
-                eta_grid_samples[sample_idx] = compute_eta_intensity(
-                    beta_grid, W_grid_clean
+                kernel = LocalNNGPKernel(
+                    lengthscale=self.config.intensity_kernel_lengthscale,
+                    variance=self.config.intensity_kernel_variance,
+                )
+                A_grid = build_grid_interpolation_matrix(
+                    site_coords=self.dataset.site_coords,
+                    grid_coords=self.dataset.grid_coords,
+                    kernel=kernel,
+                    M=self.config.neighbor_count,
                 )
 
-            eta_grid_mean = eta_grid_samples.mean(axis=0)
-            q = compute_q(eta_grid_mean)
+                eta_grid_samples = np.zeros((n_samples, n_grid))
+                for sample_idx in range(n_samples):
+                    beta_sites = self.beta_int_samples[sample_idx]  # (p_int, n_sites)
+                    beta_grid = np.zeros((p_int_plus_1, n_grid))
+
+                    for j in range(p_int_plus_1):
+                        beta_grid[j] = A_grid @ beta_sites[j]
+
+                    eta_grid_samples[sample_idx] = compute_eta_intensity(
+                        beta_grid, W_grid_clean
+                    )
+
+                eta_grid = eta_grid_samples.mean(axis=0)
+
+            q = compute_q(eta_grid)
             intensity = lambda_star_mean * q
 
             # Mark invalid grid points (where original W_grid had NaN) as NaN
@@ -507,10 +525,15 @@ class MarkedPointProcessSampler:
         # Initialize eta (linear predictor) for marks
         self.eta_marks = compute_eta(self.beta_marks, self.dataset.design_matrix_marks)
 
-        # Initialize intensity coefficients: beta_int[j, i] for feature j, site i
-        # These are updated at X ∪ U, but we track values at sites X
-        self.beta_int_sites = np.zeros((p_int, n_sites))
-        self.eta_int_sites = np.zeros(n_sites)
+        # Initialize intensity coefficients
+        # In fixed mode: beta_int[j] for feature j (shared across all sites)
+        # In spatial mode: beta_int[j, i] for feature j, site i
+        if self.config.fixed_intensity_coefficients:
+            self.beta_int_sites = np.zeros(p_int)
+            self.eta_int_sites = np.zeros(n_sites)
+        else:
+            self.beta_int_sites = np.zeros((p_int, n_sites))
+            self.eta_int_sites = np.zeros(n_sites)
 
     def _sample_marks(self, iteration: int):
         """Gibbs step (e)-(f): Update mark parameters.
@@ -572,11 +595,104 @@ class MarkedPointProcessSampler:
 
         Returns the number of pseudo-absence points sampled.
         """
+        if self.config.fixed_intensity_coefficients:
+            return self._sample_intensity_fixed()
+        else:
+            return self._sample_intensity_spatial()
+
+    def _sample_intensity_fixed(self) -> int:
+        """Fixed coefficient mode: beta is shared across all locations."""
+        n_sites = self.dataset.num_sites()
+        p_int = self.dataset.design_matrix_intensity.shape[1]
+
+        n_U = 0
+        U_indices = np.array([], dtype=int)
+
+        # Get grid design matrix
+        W_grid = self.dataset.design_matrix_grid_intensity
+        if W_grid is None and self.dataset.grid_coords is not None:
+            W_grid = np.ones((len(self.dataset.grid_coords), 1))
+
+        if self.dataset.grid_coords is not None and len(self.dataset.grid_coords) > 0:
+            # (a) Sample pseudo-absence U ~ IPP(λ*(1-q))
+            n_grid = len(self.dataset.grid_coords)
+            valid_mask = (
+                self.dataset.valid_grids
+                if self.dataset.valid_grids is not None
+                else np.ones(n_grid, dtype=bool)
+            )
+
+            # Fixed mode: eta_grid = W_grid @ beta (direct computation)
+            W_grid_clean = np.nan_to_num(W_grid, nan=0.0)
+            eta_grid = compute_eta_intensity_fixed(self.beta_int_sites, W_grid_clean)
+
+            U_indices = sample_pseudo_absence(
+                lambda_star=self.lambda_star,
+                eta_grid=eta_grid,
+                valid_mask=valid_mask,
+                region_volume=self.dataset.volume,
+                rng=self.rng,
+            )
+            n_U = len(U_indices)
+
+        # (b)-(c) Update β_int using standard PG regression
+        W_sites = self.dataset.design_matrix_intensity
+        if n_U > 0:
+            # Use cleaned grid design rows to avoid NaNs
+            W_U = W_grid_clean[U_indices]
+            W_combined = np.vstack([W_sites, W_U])
+        else:
+            W_combined = W_sites
+
+        n_combined = n_sites + n_U
+
+        # Compute eta for combined points
+        eta_combined = compute_eta_intensity_fixed(self.beta_int_sites, W_combined)
+
+        # y = 1 for sites, y = 0 for pseudo-absence
+        y_combined = np.concatenate([np.ones(n_sites), np.zeros(n_U)])
+
+        # (b) Sample ω ~ PG(1, η)
+        omega_combined = sample_omega_intensity(eta_combined, self.rng)
+
+        # Compute κ = y - 0.5
+        kappa_combined = compute_kappa_intensity(y_combined)
+
+        # (c) Update β using fixed coefficient update
+        self.beta_int_sites, eta_combined = update_beta_intensity_fixed(
+            beta_int=self.beta_int_sites,
+            W=W_combined,
+            omega=omega_combined,
+            kappa=kappa_combined,
+            prior_mean=self.config.intensity_prior_mean,
+            prior_variance=self.config.intensity_prior_variance,
+            rng=self.rng,
+        )
+
+        # Update eta at sites
+        self.eta_int_sites = compute_eta_intensity_fixed(
+            self.beta_int_sites, W_sites
+        )
+
+        # (d) Update λ*
+        n_total = n_sites + n_U
+        self.lambda_star = update_lambda_star(
+            n_total=n_total,
+            region_volume=self.dataset.volume,
+            prior_shape=self.config.lambda_prior_shape,
+            prior_rate=self.config.lambda_prior_rate,
+            rng=self.rng,
+        )
+
+        return n_U
+
+    def _sample_intensity_spatial(self) -> int:
+        """Spatial coefficient mode: beta varies by location (NNGP)."""
         n_sites = self.dataset.num_sites()
         p_int = self.dataset.design_matrix_intensity.shape[1]
         kernel = LocalNNGPKernel(
-            lengthscale=self.config.mark_kernel_lengthscale,
-            variance=self.config.mark_kernel_variance,
+            lengthscale=self.config.intensity_kernel_lengthscale,
+            variance=self.config.intensity_kernel_variance,
         )
 
         n_U = 0
@@ -597,16 +713,17 @@ class MarkedPointProcessSampler:
                 else np.ones(n_grid, dtype=bool)
             )
 
-            # Interpolate eta_int to grid using NNGP conditional mean
-            if self.factor_cache is not None:
-                A_grid_list = self.factor_cache.A_grid_all()
-                beta_grid = np.zeros((p_int, n_grid))
-                for j in range(min(p_int, len(A_grid_list))):
-                    A_grid = A_grid_list[j]
-                    beta_grid[j] = A_grid @ self.beta_int_sites[j]
-                eta_grid = compute_eta_intensity(beta_grid, W_grid)
-            else:
-                eta_grid = np.zeros(n_grid)
+            # Interpolate eta_int to grid using NNGP conditional mean matching intensity kernel
+            A_grid = build_grid_interpolation_matrix(
+                site_coords=self.dataset.site_coords,
+                grid_coords=self.dataset.grid_coords,
+                kernel=kernel,
+                M=self.config.neighbor_count,
+            )
+            beta_grid = np.zeros((p_int, n_grid))
+            for j in range(p_int):
+                beta_grid[j] = A_grid @ self.beta_int_sites[j]
+            eta_grid = compute_eta_intensity(beta_grid, W_grid)
 
             U_indices = sample_pseudo_absence(
                 lambda_star=self.lambda_star,
@@ -630,7 +747,7 @@ class MarkedPointProcessSampler:
             W_sites = self.dataset.design_matrix_intensity
             # Use grid design matrix for U points (at their sampled indices)
             if W_grid is not None and W_grid.shape[1] == p_int:
-                W_U = W_grid[U_indices]
+                W_U = np.nan_to_num(W_grid, nan=0.0)[U_indices]
             else:
                 W_U = np.ones((n_U, p_int))
             W_combined = np.vstack([W_sites, W_U])
@@ -742,7 +859,11 @@ class MarkedPointProcessSampler:
 
         lambda_star_samples = np.zeros(n_saved)
         beta_mark_samples = np.zeros((n_saved, K_minus_1, p_mark, n_sites))
-        beta_int_samples = np.zeros((n_saved, p_int, n_sites))
+        # Fixed mode: (n_saved, p_int), Spatial mode: (n_saved, p_int, n_sites)
+        if self.config.fixed_intensity_coefficients:
+            beta_int_samples = np.zeros((n_saved, p_int))
+        else:
+            beta_int_samples = np.zeros((n_saved, p_int, n_sites))
         n_pseudo_absence = []
 
         save_idx = 0

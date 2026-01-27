@@ -12,6 +12,7 @@ from .map_template import MapPlotter
 from .style import (
     CMAP_INTENSITY,
     CMAP_PROBABILITY,
+    FIGURE_SIZE_GRID_1X2,
     FIGURE_SIZE_GRID_2X2,
     FIGURE_SIZE_SINGLE,
     TITLE_FONTSIZE,
@@ -320,7 +321,7 @@ def plot_distance_prior(
     origins: List[str],
     output_path: Optional[Union[str, Path]] = None,
 ) -> tuple:
-    """Plot distance-based prior probability p0 for all origins.
+    """Plot distance-based prior probability p0 for main origins (神津島, 信州).
 
     Parameters
     ----------
@@ -331,7 +332,7 @@ def plot_distance_prior(
     p0_grid : np.ndarray
         Distance-based prior probabilities (n_grid, K).
     origins : list of str
-        Names of origins (first 4 used).
+        Names of origins (first 2 used: 神津島, 信州).
     output_path : str or Path, optional
         Path to save the figure.
 
@@ -346,13 +347,15 @@ def plot_distance_prior(
 
     from .style import CMAP_PRIOR, SUPTITLE_FONTSIZE, set_spine_width
 
-    fig, axes = plt.subplots(
-        2, 2, figsize=FIGURE_SIZE_GRID_2X2, constrained_layout=True
-    )
-    axes_flat = axes.flatten()
+    # Only show first 2 origins (神津島, 信州)
+    n_origins_to_plot = 2
 
-    for idx in range(4):
-        ax = axes_flat[idx]
+    fig, axes = plt.subplots(
+        1, n_origins_to_plot, figsize=FIGURE_SIZE_GRID_1X2, constrained_layout=True
+    )
+
+    for idx in range(n_origins_to_plot):
+        ax = axes[idx]
 
         sc = ax.scatter(
             grid_coords[plotter.is_land, 0],
@@ -593,7 +596,7 @@ def plot_uncertainty_map(
     period_name: str,
     output_path: Optional[Union[str, Path]] = None,
 ) -> tuple:
-    """Plot posterior standard deviation (uncertainty) maps.
+    """Plot posterior standard deviation (uncertainty) maps for main origins.
 
     Parameters
     ----------
@@ -606,7 +609,7 @@ def plot_uncertainty_map(
     site_coords : np.ndarray
         Site coordinates (n_sites, 2).
     origins : list of str
-        Names of origins (first 4 used).
+        Names of origins (first 2 used: 神津島, 信州).
     period_name : str
         Name of the time period.
     output_path : str or Path, optional
@@ -623,18 +626,20 @@ def plot_uncertainty_map(
 
     from .style import CMAP_INTENSITY, SUPTITLE_FONTSIZE, set_spine_width
 
+    # Only show first 2 origins (神津島, 信州)
+    n_origins_to_plot = 2
+
     fig, axes = plt.subplots(
-        2, 2, figsize=FIGURE_SIZE_GRID_2X2, constrained_layout=True
+        1, n_origins_to_plot, figsize=FIGURE_SIZE_GRID_1X2, constrained_layout=True
     )
-    axes_flat = axes.flatten()
 
     # Check for valid data (not all NaN)
-    valid_data = posterior_std[:4, plotter.is_land]
+    valid_data = posterior_std[:n_origins_to_plot, plotter.is_land]
     all_nan = np.all(np.isnan(valid_data))
 
     if all_nan:
-        for idx in range(4):
-            ax = axes_flat[idx]
+        for idx in range(n_origins_to_plot):
+            ax = axes[idx]
             ax.text(
                 0.5,
                 0.5,
@@ -665,8 +670,8 @@ def plot_uncertainty_map(
         if np.isnan(vmax) or vmax == 0:
             vmax = 0.1  # Default fallback
 
-        for idx in range(4):
-            ax = axes_flat[idx]
+        for idx in range(n_origins_to_plot):
+            ax = axes[idx]
 
             sc = ax.scatter(
                 grid_coords[plotter.is_land, 0],
