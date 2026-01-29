@@ -214,11 +214,10 @@ def plot_loocv_comparison(
             ha="center",
             va="center",
             transform=ax.transAxes,
-            fontsize=14,
+            fontsize=TITLE_FONTSIZE,
         )
-        ax.set_xlabel("時期", fontsize=TITLE_FONTSIZE)
-        ax.set_ylabel("Aitchison距離（LOOCV）", fontsize=TITLE_FONTSIZE)
-        ax.set_title("モデル比較: Leave-One-Out交差検証", fontsize=TITLE_FONTSIZE)
+        ax.set_xlabel("時期")
+        ax.set_ylabel("Aitchison距離（LOOCV）")
         ax.set_xticks(x)
         ax.set_xticklabels(period_names)
         # No legend for empty plot
@@ -242,9 +241,8 @@ def plot_loocv_comparison(
             capsize=3,
         )
 
-        ax.set_xlabel("時期", fontsize=TITLE_FONTSIZE)
-        ax.set_ylabel("Aitchison距離（LOOCV）", fontsize=TITLE_FONTSIZE)
-        ax.set_title("モデル比較: Leave-One-Out交差検証", fontsize=TITLE_FONTSIZE)
+        ax.set_xlabel("時期")
+        ax.set_ylabel("Aitchison距離（LOOCV）")
         ax.set_xticks(x)
         ax.set_xticklabels(period_names)
         ax.legend()

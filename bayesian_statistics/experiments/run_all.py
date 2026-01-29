@@ -512,10 +512,12 @@ def generate_figures(
         plot_model_comparison_map,
         plot_site_probability_map,
         plot_uncertainty_map,
+        setup_matplotlib_style,
     )
 
     progress.section("Generating figures")
     apply_japanese_font()
+    setup_matplotlib_style()
 
     figures_dir = output_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -632,6 +634,7 @@ def generate_figures(
             all_site_probability[period] = np.load(site_prob_path)
 
     if all_site_probability:
+        # Existing: two-origins version (神津島・信州)
         plot_effect_by_periods_and_origins(
             plotter=plotter,
             grid_coords=grid_coords,
@@ -647,6 +650,24 @@ def generate_figures(
             weight_by=all_site_probability,
             title_suffix="（遺跡存在確率で重み付け）",
             output_path=figures_dir / "fig_5_10_weighted_intercept_adjustment.png",
+        )
+
+        # Additional: all-origins version (論文非掲載だが自動生成)
+        plot_effect_by_periods_and_origins(
+            plotter=plotter,
+            grid_coords=grid_coords,
+            all_effects=all_effects,
+            all_datasets=all_datasets,
+            effect_name="intercept_adjustment",
+            periods=list(config.time_periods.keys()),
+            origin_indices=list(range(len(config.origins))),  # 全5産地
+            origins=config.origins,
+            time_periods=config.time_periods,
+            scatter=True,
+            vcenter=0.2,
+            weight_by=all_site_probability,
+            title_suffix="（遺跡存在確率で重み付け・全産地）",
+            output_path=figures_dir / "fig_5_10_weighted_intercept_adjustment_all_origins.png",
         )
     else:
         progress.info("Skipping Figure 5.10: site_probability.npy not found")
@@ -845,6 +866,7 @@ def run_ipp_fixed_experiment(
         MapPlotter,
         apply_japanese_font,
         plot_site_probability_map,
+        setup_matplotlib_style,
     )
 
     progress.section("Running IPP with fixed intensity coefficients")
@@ -915,6 +937,7 @@ def run_ipp_fixed_experiment(
     # Generate visualization
     progress.info("Generating site probability figure...")
     apply_japanese_font()
+    setup_matplotlib_style()
 
     # Get boundary for plotter
     import polars as pl
@@ -987,8 +1010,8 @@ def main():
     parser.add_argument(
         "--n-iter",
         type=int,
-        default=1000,
-        help="Number of MCMC iterations (default: 1000)",
+        default=None,
+        help="Number of MCMC iterations (default: use ExperimentConfig.n_iter)",
     )
     parser.add_argument(
         "--quiet",
@@ -1026,12 +1049,15 @@ def main():
     set_progress_manager(progress)
 
     # Create config
-    config = ExperimentConfig(n_iter=args.n_iter, verbosity=verbosity)
+    if args.n_iter is not None:
+        config = ExperimentConfig(n_iter=args.n_iter, verbosity=verbosity)
+    else:
+        config = ExperimentConfig(verbosity=verbosity)
 
     # Auto-adjust for testing if n_iter is small
-    if args.n_iter < config.burn_in + config.thinning * 10:
+    if config.n_iter < config.burn_in + config.thinning * 10:
         progress.info(
-            f"Note: n_iter={args.n_iter} is small. "
+            f"Note: n_iter={config.n_iter} is small. "
             f"Auto-adjusting burn_in/thinning for testing."
         )
         config.adjust_for_testing(args.n_iter)

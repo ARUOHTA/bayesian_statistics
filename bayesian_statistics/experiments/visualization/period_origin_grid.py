@@ -13,8 +13,10 @@ from .map_template import MapPlotter
 from .style import (
     CMAP_DIVERGING,
     CMAP_PROBABILITY,
+    LABEL_FONTSIZE,
     SPINE_WIDTH_THIN,
-    SUPTITLE_FONTSIZE,
+    TICK_FONTSIZE,
+    TITLE_FONTSIZE,
     set_spine_width,
 )
 
@@ -199,9 +201,9 @@ def plot_effect_by_periods_and_origins(
 
             # Labels
             if row_idx == 0:
-                ax.set_title(time_periods[p_idx], fontsize=11)
+                ax.set_title(time_periods[p_idx], fontsize=TITLE_FONTSIZE)
             if col_idx == 0:
-                ax.set_ylabel(origins[origin_idx], fontsize=11)
+                ax.set_ylabel(origins[origin_idx], fontsize=LABEL_FONTSIZE)
 
             ax.set_xticks([])
             ax.set_yticks([])
@@ -209,7 +211,6 @@ def plot_effect_by_periods_and_origins(
 
     # Common colorbar
     fig.colorbar(sc, ax=axes, label="確率", shrink=0.7, pad=0.02)
-    fig.suptitle(f"効果: {effect_name}{title_suffix}", fontsize=SUPTITLE_FONTSIZE, y=1.01)
 
     if output_path:
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -301,10 +302,6 @@ def plot_all_periods_for_origin(
 
     # Common colorbar
     fig.colorbar(sc, ax=axes, label="事後平均", shrink=0.8)
-    fig.suptitle(
-        f"{origins[origin_index]}産黒曜石の組成比（事後平均）",
-        fontsize=SUPTITLE_FONTSIZE,
-    )
 
     if output_path:
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -404,11 +401,11 @@ def plot_all_origins_all_periods(
 
             # Row label (origin name) on left only
             if p_idx == 0:
-                ax.set_ylabel(origins[origin_idx], fontsize=12)
+                ax.set_ylabel(origins[origin_idx], fontsize=LABEL_FONTSIZE)
 
             # Column label (period name) on top only
             if origin_idx == 0:
-                ax.set_title(time_periods[p_idx], fontsize=10)
+                ax.set_title(time_periods[p_idx], fontsize=TICK_FONTSIZE)
 
             ax.set_xticks([])
             ax.set_yticks([])
@@ -416,11 +413,6 @@ def plot_all_origins_all_periods(
 
     # Common colorbar
     fig.colorbar(sc, ax=axes, label="事後平均確率", shrink=0.6, pad=0.02)
-    fig.suptitle(
-        "黒曜石産地組成比の時代変化（事後平均）",
-        fontsize=SUPTITLE_FONTSIZE,
-        y=1.01,
-    )
 
     if output_path:
         fig.savefig(output_path, dpi=300, bbox_inches="tight")

@@ -41,6 +41,7 @@ from .style import (
     FIGURE_DPI,
     FIGURE_FORMAT,
     apply_japanese_font,
+    setup_matplotlib_style,
 )
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "MapPlotter",
     # Style
     "apply_japanese_font",
+    "setup_matplotlib_style",
     "FIGURE_DPI",
     "FIGURE_FORMAT",
     "CMAP_PROBABILITY",

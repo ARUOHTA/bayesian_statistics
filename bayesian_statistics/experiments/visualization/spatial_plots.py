@@ -15,6 +15,7 @@ from .style import (
     FIGURE_SIZE_GRID_1X2,
     FIGURE_SIZE_GRID_2X2,
     FIGURE_SIZE_SINGLE,
+    LABEL_FONTSIZE,
     TITLE_FONTSIZE,
 )
 
@@ -84,7 +85,6 @@ def plot_single_origin_map(
     plotter.add_colorbar(fig, sc, ax, label="確率")
     plotter.set_axis_style(
         ax,
-        title=f"{origin_name}産黒曜石の組成比（{period_name}）",
         xlabel="経度",
         ylabel="緯度",
     )
@@ -163,11 +163,6 @@ def plot_all_origins_grid(
         plotter.add_colorbar(fig, sc, ax, label="確率")
         plotter.set_axis_style(ax, title=origins[idx])
 
-    fig.suptitle(
-        f"黒曜石産地組成比のグリッド予測（{period_name}）",
-        fontsize=TITLE_FONTSIZE,
-    )
-
     if output_path:
         plotter.save_figure(fig, output_path)
 
@@ -241,7 +236,6 @@ def plot_intensity_map(
     plotter.add_colorbar(fig, sc, ax, label="強度 λ(s)")
     plotter.set_axis_style(
         ax,
-        title=f"遺跡存在強度（{period_name}）\nλ* = {lambda_star_mean:.2f}",
         xlabel="経度",
         ylabel="緯度",
     )
@@ -345,7 +339,7 @@ def plot_distance_prior(
     """
     import matplotlib.pyplot as plt
 
-    from .style import CMAP_PRIOR, SUPTITLE_FONTSIZE, set_spine_width
+    from .style import CMAP_PRIOR, set_spine_width
 
     # Only show first 2 origins (神津島, 信州)
     n_origins_to_plot = 2
@@ -374,11 +368,6 @@ def plot_distance_prior(
         ax.set_xticks([])
         ax.set_yticks([])
         set_spine_width(ax, 0.3)
-
-    fig.suptitle(
-        r"距離ベース事前分布 $p_0(s)$",
-        fontsize=SUPTITLE_FONTSIZE,
-    )
 
     if output_path:
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -429,7 +418,7 @@ def plot_model_comparison_map(
     """
     import matplotlib.pyplot as plt
 
-    from .style import SUPTITLE_FONTSIZE, set_spine_width
+    from .style import set_spine_width
 
     # 4 rows (origins) x 2 cols (NW, MMCP)
     fig, axes = plt.subplots(4, 2, figsize=(12, 20), constrained_layout=True)
@@ -462,8 +451,8 @@ def plot_model_comparison_map(
         plotter.plot_boundary(ax)
 
         if origin_idx == 0:
-            ax.set_title("NW推定量", fontsize=12)
-        ax.set_ylabel(origins[origin_idx], fontsize=11)
+            ax.set_title("NW推定量", fontsize=TITLE_FONTSIZE)
+        ax.set_ylabel(origins[origin_idx], fontsize=LABEL_FONTSIZE)
         ax.set_xticks([])
         ax.set_yticks([])
         set_spine_width(ax, 0.3)
@@ -495,17 +484,12 @@ def plot_model_comparison_map(
         plotter.plot_boundary(ax)
 
         if origin_idx == 0:
-            ax.set_title("MMCP（提案手法）", fontsize=12)
+            ax.set_title("MMCP（提案手法）", fontsize=TITLE_FONTSIZE)
         ax.set_xticks([])
         ax.set_yticks([])
         set_spine_width(ax, 0.3)
 
     fig.colorbar(sc, ax=axes, label="確率", shrink=0.6, pad=0.02)
-    fig.suptitle(
-        f"モデル比較: NW vs MMCP（{period_name}）",
-        fontsize=SUPTITLE_FONTSIZE,
-        y=1.01,
-    )
 
     if output_path:
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -575,7 +559,6 @@ def plot_site_probability_map(
     plotter.add_colorbar(fig, sc, ax, label="存在確率 q(s)")
     plotter.set_axis_style(
         ax,
-        title=f"遺跡の存在確率（{period_name}）",
         xlabel="経度",
         ylabel="緯度",
     )
@@ -624,7 +607,7 @@ def plot_uncertainty_map(
     """
     import matplotlib.pyplot as plt
 
-    from .style import CMAP_INTENSITY, SUPTITLE_FONTSIZE, set_spine_width
+    from .style import CMAP_INTENSITY, TICK_FONTSIZE, set_spine_width
 
     # Only show first 2 origins (神津島, 信州)
     n_origins_to_plot = 2
@@ -647,7 +630,7 @@ def plot_uncertainty_map(
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
-                fontsize=10,
+                fontsize=TICK_FONTSIZE,
             )
             # Mark site locations only
             ax.scatter(
@@ -702,11 +685,6 @@ def plot_uncertainty_map(
             ax.set_xticks([])
             ax.set_yticks([])
             set_spine_width(ax, 0.3)
-
-    fig.suptitle(
-        f"推定の不確実性（{period_name}）",
-        fontsize=SUPTITLE_FONTSIZE,
-    )
 
     if output_path:
         fig.savefig(output_path, dpi=300, bbox_inches="tight")

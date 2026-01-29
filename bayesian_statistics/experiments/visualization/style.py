@@ -34,10 +34,27 @@ BOUNDARY_COLOR = "grey"
 SPINE_WIDTH = 0.5
 SPINE_WIDTH_THIN = 0.3
 
-# Text settings
-TITLE_FONTSIZE = 14
-LABEL_FONTSIZE = 11
-SUPTITLE_FONTSIZE = 16
+# Text settings (統一されたフォントサイズ)
+TITLE_FONTSIZE = 11  # サブプロットタイトル/列・行ヘッダー用
+LABEL_FONTSIZE = 10  # 軸ラベル用
+TICK_FONTSIZE = 9    # 目盛りラベル用
+LEGEND_FONTSIZE = 9  # 凡例用
+SUPTITLE_FONTSIZE = 16  # (未使用: suptitleは論文では削除)
+
+
+def setup_matplotlib_style() -> None:
+    """matplotlib のグローバルスタイル設定.
+
+    論文用の図を生成する際に呼び出し、フォントサイズを統一する。
+    """
+    import matplotlib as mpl
+
+    mpl.rcParams["font.size"] = 10
+    mpl.rcParams["axes.titlesize"] = TITLE_FONTSIZE
+    mpl.rcParams["axes.labelsize"] = LABEL_FONTSIZE
+    mpl.rcParams["xtick.labelsize"] = TICK_FONTSIZE
+    mpl.rcParams["ytick.labelsize"] = TICK_FONTSIZE
+    mpl.rcParams["legend.fontsize"] = LEGEND_FONTSIZE
 
 # Value ranges
 PROB_VMIN = 0.0
