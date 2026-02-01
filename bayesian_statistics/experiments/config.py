@@ -82,7 +82,7 @@ class ExperimentConfig:
             "cost_takahara",
         ]
     )
-    source_weights: List[float] = field(default_factory=lambda: [2, 1, 0.01, 0.01])
+    source_weights: List[float] = field(default_factory=lambda: [2, 0.5, 0.01, 0.01])
 
     # MMCPハイパーパラメータ
     tau: float = 0.5
@@ -93,7 +93,7 @@ class ExperimentConfig:
     neighbor_count: int = 25
 
     # カーネルパラメータ（マーク用）
-    mark_lengthscale: float = 0.2
+    mark_lengthscale: float = 0.1
     mark_variance: float = 0.1
 
     # カーネルパラメータ（強度用）
