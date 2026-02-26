@@ -31,6 +31,8 @@ from .spatial_plots import (
     plot_model_comparison_map,
     plot_single_origin_map,
     plot_site_probability_map,
+    plot_study_area_map,
+    plot_study_area_with_sources,
     plot_uncertainty_map,
 )
 from .style import (
@@ -78,6 +80,8 @@ __all__ = [
     "plot_distance_prior",
     "plot_model_comparison_map",
     "plot_site_probability_map",
+    "plot_study_area_map",
+    "plot_study_area_with_sources",
     "plot_uncertainty_map",
     # Diagnostics
     "plot_lambda_star_diagnostics",

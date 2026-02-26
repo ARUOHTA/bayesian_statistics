@@ -690,3 +690,102 @@ def plot_uncertainty_map(
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
 
     return fig, axes
+
+
+def plot_study_area_map(
+    plotter: MapPlotter,
+    grid_coords: np.ndarray,
+    origin_coords: Optional[dict[str, tuple[float, float]]] = None,
+    origins: Optional[List[str]] = None,
+    site_coords: Optional[np.ndarray] = None,
+    output_path: Optional[Union[str, Path]] = None,
+) -> tuple:
+    """Plot study area map with optional source and site locations.
+
+    Parameters
+    ----------
+    plotter : MapPlotter
+        Map plotter instance.
+    grid_coords : np.ndarray
+        Grid coordinates (n_grid, 2).
+    origin_coords : dict, optional
+        Dictionary mapping origin name to (lon, lat) coordinates.
+    origins : list of str, optional
+        Names of origins to plot (first 4 used).
+    site_coords : np.ndarray, optional
+        Site coordinates (n_sites, 2).
+    output_path : str or Path, optional
+        Path to save the figure.
+
+    Returns
+    -------
+    fig : Figure
+        Matplotlib figure.
+    ax : Axes
+        Matplotlib axes.
+    """
+    from .style import SPINE_WIDTH_THIN
+
+    # Use same aspect ratio as other grid figures (5:5 per cell)
+    fig, ax = plotter.create_figure(1, 1, figsize=(5, 5))
+
+    # Plot land area as light gray
+    ax.scatter(
+        grid_coords[plotter.is_land, 0],
+        grid_coords[plotter.is_land, 1],
+        c="lightgray",
+        s=3,
+        alpha=0.5,
+    )
+
+    # Plot boundary
+    plotter.plot_boundary(ax)
+
+    # Plot source locations as simple black dots
+    if origin_coords is not None and origins is not None:
+        for origin_name in origins[:4]:
+            if origin_name in origin_coords:
+                lon, lat = origin_coords[origin_name]
+                ax.scatter(lon, lat, c="black", s=30, marker="o", zorder=10)
+
+    # Plot site locations as simple black dots
+    if site_coords is not None:
+        ax.scatter(
+            site_coords[:, 0],
+            site_coords[:, 1],
+            c="black",
+            s=5,
+            marker="o",
+            alpha=0.7,
+            zorder=5,
+        )
+
+    ax.set_xticks([])
+    ax.set_yticks([])
+    plotter.set_axis_style(ax, spine_width=SPINE_WIDTH_THIN)
+
+    if output_path:
+        plotter.save_figure(fig, output_path)
+
+    return fig, ax
+
+
+# Alias for backward compatibility
+def plot_study_area_with_sources(
+    plotter: MapPlotter,
+    grid_coords: np.ndarray,
+    origin_coords: dict[str, tuple[float, float]],
+    origins: List[str],
+    output_path: Optional[Union[str, Path]] = None,
+) -> tuple:
+    """Plot study area map with obsidian source locations.
+
+    This is an alias for plot_study_area_map with origin_coords.
+    """
+    return plot_study_area_map(
+        plotter=plotter,
+        grid_coords=grid_coords,
+        origin_coords=origin_coords,
+        origins=origins,
+        output_path=output_path,
+    )

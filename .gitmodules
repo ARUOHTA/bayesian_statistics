@@ -1,3 +1,9 @@
 [submodule "260128_master_thesis"]
 	path = 260128_master_thesis
 	url = git@github.com:ARUOHTA/260128_master_thesis.git
+[submodule "papers/mmcp_method"]
+	path = papers/mmcp_method
+	url = github:ARUOHTA/mmcp-method.git
+[submodule "papers/nw_paper"]
+	path = papers/nw_paper
+	url = github:ARUOHTA/nw-paper.git

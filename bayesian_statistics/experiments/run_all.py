@@ -511,6 +511,7 @@ def generate_figures(
         plot_loocv_comparison,
         plot_model_comparison_map,
         plot_site_probability_map,
+        plot_study_area_map,
         plot_uncertainty_map,
         setup_matplotlib_style,
     )
@@ -581,7 +582,35 @@ def generate_figures(
     )
     grid_coords = first_dataset.grid_coords
 
-    # 4. Generate Figure 5.1: All origins x all periods (4x5 grid)
+    # 4a. Generate Figure 5.0a: Study area with source locations
+    progress.info("Generating Figure 5.0a: Study area with source locations")
+    plot_study_area_map(
+        plotter=plotter,
+        grid_coords=grid_coords,
+        origin_coords=config.origin_coords,
+        origins=config.origins,
+        output_path=figures_dir / "fig_5_0a_study_area_sources.png",
+    )
+
+    # 4b. Generate Figure 5.0b: Study area with all site locations
+    progress.info("Generating Figure 5.0b: Study area with site locations")
+    # Collect all site coordinates from all periods
+    all_site_coords = []
+    for dataset in all_datasets.values():
+        if hasattr(dataset, "site_coords"):
+            all_site_coords.append(dataset.site_coords)
+    if all_site_coords:
+        combined_site_coords = np.vstack(all_site_coords)
+        # Remove duplicates (same site may appear in multiple periods)
+        combined_site_coords = np.unique(combined_site_coords, axis=0)
+        plot_study_area_map(
+            plotter=plotter,
+            grid_coords=grid_coords,
+            site_coords=combined_site_coords,
+            output_path=figures_dir / "fig_5_0b_study_area_sites.png",
+        )
+
+    # 5. Generate Figure 5.1: All origins x all periods (4x5 grid)
     progress.info("Generating Figure 5.1: All origins x all periods")
     plot_all_origins_all_periods(
         plotter=plotter,

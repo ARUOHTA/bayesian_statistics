@@ -25,8 +25,8 @@ def test_config_default_values():
     # MMCPハイパーパラメータ
     assert config.tau == 0.5
     assert config.alpha == 1.0
-    assert config.n_iter == 300  # 開発用デフォルト値
-    assert config.burn_in == 50  # 開発用デフォルト値
+    assert config.n_iter == 500  # 開発用デフォルト値
+    assert config.burn_in == 100  # 開発用デフォルト値
     assert config.thinning == 2
     assert config.neighbor_count == 25
 
@@ -87,7 +87,7 @@ def test_config_source_weights():
 
     config = ExperimentConfig()
 
-    assert config.source_weights == [2, 1, 0.01, 0.01]
+    assert config.source_weights == [2, 0.5, 0.01, 0.01]
 
 
 def test_config_custom_values():

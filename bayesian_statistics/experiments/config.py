@@ -74,6 +74,15 @@ class ExperimentConfig:
     origins: List[str] = field(
         default_factory=lambda: ["神津島", "信州", "箱根", "高原山", "その他"]
     )
+    # 産地の座標 (経度, 緯度) - 10_2_calculate_distance.pyより
+    origin_coords: dict[str, tuple[float, float]] = field(
+        default_factory=lambda: {
+            "神津島": (139.1517940530124, 34.214991203764754),
+            "信州": (138.1431305514158, 36.14658805493071),
+            "箱根": (139.0446125901514, 35.221867157762105),
+            "高原山": (139.7766240432928, 36.900342242149065),
+        }
+    )
     distance_column_names: List[str] = field(
         default_factory=lambda: [
             "cost_kouzu",
@@ -87,13 +96,13 @@ class ExperimentConfig:
     # MMCPハイパーパラメータ
     tau: float = 0.5
     alpha: float = 1.0
-    n_iter: int = 300
-    burn_in: int = 50
+    n_iter: int = 500
+    burn_in: int = 100
     thinning: int = 2
     neighbor_count: int = 25
 
     # カーネルパラメータ（マーク用）
-    mark_lengthscale: float = 0.1
+    mark_lengthscale: float = 0.2
     mark_variance: float = 0.1
 
     # カーネルパラメータ（強度用）
@@ -113,7 +122,7 @@ class ExperimentConfig:
     lambda_fixed: List[float] = field(default_factory=lambda: [1, 1, 1, 1])
 
     # グリッドサブサンプリング
-    grid_subsample_ratio: float = 0.01
+    grid_subsample_ratio: float = 0.1
 
     # ==========================================================================
     # 使用可能な共変量一覧（ObsidianDataPreprocessorのスキーマより）

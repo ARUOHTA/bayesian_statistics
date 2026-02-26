@@ -236,3 +236,6 @@ out/
 *.dvi
 *.xdv
 .DS_Store
+
+# Markdown files
+*.md
