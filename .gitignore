@@ -239,4 +239,4 @@ out/
 
 # Markdown files
 *.md
-!README.md
+!/README.md
